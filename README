@@ -1,0 +1,30 @@
+ipfavela is a tiny node.js script to manage port forwarding. Our use for 
+it is as a poor man's alternative to iptables. 
+
+In the age of cheap virtualized Linux boxes, not everyone has a full Xen 
+slice to work with, and plenty of other solutions don't allow you to 
+properly manage your VPS networking. This includes not being able to use
+"iptables" and "ifconfig".
+
+To protect your not-so-battle-proven daemons, a simple solution is to only
+let them bind to the local interface (lo, or '127.0.0.1') and then proxy
+that service by forwarding the port to the external interface. In the
+process, filter out any unknown remote IPs. This allows you some degree
+of security when building distributed clusters on top of very cheap VPSs.
+
+To deploy, simply copy the script to your problematic VPS and customize
+the "forwarder" calls at the bottom:
+
+  forwarder(27017, '66.66.66.66', 27017, '127.0.0.1', ['66.66.66.67'])
+
+The example above will forward port 27017 (MongoDB anyone?) from the local
+interface to a wan interface, but only allow connections from a specific
+IP ('66.66.66.67'). You can add multiple forwarder calls to proxy more
+ports.
+
+
+Copyright 2010 John D. Rowell <me@jdrowell.com>
+Copyright 2010 EYB Serviços de Internet
+License: MIT
+
+
