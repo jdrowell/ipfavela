@@ -1,5 +1,6 @@
 var net = require("net");
 var sys = require("sys");
+var dns = require("dns");
 
 var sessions = {};
 var ENCODING = 'binary';
@@ -32,6 +33,9 @@ function destSetup(client, dest) {
   });
 
   dest.addListener('data', function(data) {
+    // check if stream is writable!
+    if (client.readyState != 'open')
+      logClient(client, 'not ready? -> ' + client.readyState);
     if (client.write(data, ENCODING)) { 
       s['bytesOut'] += data.length;
     } else {
@@ -42,7 +46,9 @@ function destSetup(client, dest) {
 
   dest.addListener('drain', function() {
     s['clientStatus'] = 'R'; 
-    client.resume();
+    if (client.readyState == 'open') {
+      client.resume();
+    }
   });
 
   dest.addListener('end', function() {
@@ -79,11 +85,45 @@ function logSessions() {
  *   C - closed
  */
 
-function forwarder(fromPort, fromIP, toPort, toIP, allowedIPs) {
+function forwarder(fromPort, fromIP, toPort, toIP, allowedHosts) {
+  var resolvedHosts = {};
+  var allowedIPs = {};
+
+  function updateAllowedIP(host) {
+    dns.resolve4(host, function(err, addresses) {
+      if (err) {
+        log('host: ' + host);
+        throw err;
+      }
+
+      /* remove previous resolved IPs */
+      for (var i in resolvedHosts[host]) {
+        delete allowedIPs[resolvedHosts[host][i]];
+      }
+
+      /* log('host: ' + host + ' -> ' + JSON.stringify(addresses)); */
+      resolvedHosts[host] = addresses;
+
+      for (var i in addresses) {
+        allowedIPs[addresses[i]] = 1;
+      }
+      /* log('allowed IPs: ' + sys.inspect(allowedIPs)); */
+    });
+  }
+
+  function updateAllowedIPs() {
+    for (var i in allowedHosts) {
+      updateAllowedIP(allowedHosts[i]);
+    }
+  }
+
+  updateAllowedIPs();
+  setInterval(updateAllowedIPs, 60000);
+
   net.createServer(function(client) {
     var cid = client.fd;
 
-    if (allowedIPs.indexOf(client.remoteAddress) == -1) {
+    if (allowedIPs[client.remoteAddress] != 1) {
       client.end();
       log('Hacker alert! ' + client.remoteAddress);
       return
@@ -139,7 +179,7 @@ function forwarder(fromPort, fromIP, toPort, toIP, allowedIPs) {
 
 setInterval(logSessions, 10000);
 
-forwarder(27017, 'x.x.x.x', 27017, '127.0.0.1',
-  [ 'x.x.x.x', 'x.x.x.x' ]);
+forwarder(27017, '1.2.3.4', 27017, '127.0.0.1',
+  [ 'host1', 'host2', 'host3' ]);
 
 
