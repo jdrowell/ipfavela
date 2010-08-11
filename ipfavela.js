@@ -15,8 +15,8 @@ function logClient(client, msg) {
   if (cid == null) {
     msg = 'CLI: ' + client.remoteAddress + ' (' + cid + ') -- ' + msg
   } else { 
-    msg = 'CLI: ' + client.remoteAddress + ' (' + cid + ' ' + client.readyState + '/' + sessions[cid]['clientStatus'] +
-    '/' + sessions[cid]['destStatus'] + ') -- ' + msg;
+    msg = 'CLI: ' + client.remoteAddress + ' (' + cid + ' ' + client.readyState)
+      + ') -- ' + msg;
   }
   log(msg);
 }
@@ -26,26 +26,23 @@ function destSetup(client, dest) {
   var s = sessions[cid];
 
   dest.addListener('connect', function() {
-    s['destStatus'] = 'R'; 
-    s['clientStatus'] = 'R'; 
     client.resume();
     logClient(client, 'dest CONNECT');
   });
 
   dest.addListener('data', function(data) {
     // check if stream is writable!
-    if (client.readyState != 'open')
-      logClient(client, 'not ready? -> ' + client.readyState);
+    if (client.readyState != 'open') {
+      return;
+    }
     if (client.write(data, ENCODING)) { 
       s['bytesOut'] += data.length;
     } else {
-      s['destStatus'] = 'P'; 
       dest.pause();
     }
   });
 
   dest.addListener('drain', function() {
-    s['clientStatus'] = 'R'; 
     if (client.readyState == 'open') {
       client.resume();
     }
@@ -69,21 +66,13 @@ function logSessions() {
   log('--- active sessions ---');
   for (i in sessions) {
     var s = sessions[i];
-    log(s['client'].remoteAddress + ' (' + i + ' ' + s['client'].readyState + ' ' + s['clientStatus'] + '/' + 
-      s['dest'].fd + ' ' + s['dest'].readyState + ' ' + s['destStatus'] + ') -- ' + 
+    log(s['client'].remoteAddress + ' (' + i + ' ' + s['client'].readyState + ' ' + '/' + 
+      s['dest'].fd + ' ' + s['dest'].readyState + ' ' + ') -- ' + 
       s['fromIP'] + ':' + s['fromPort'] + ' -> ' + 
       s['toIP']   + ':' + s['toPort']   +  
       ' (' + s['bytesIn'] + ' in/' + s['bytesOut'] + ' out)');
   }
 }
-
-/*
- * client statuses
- *   D - disconnected
- *   P - paused
- *   R - running
- *   C - closed
- */
 
 function forwarder(fromPort, fromIP, toPort, toIP, allowedHosts) {
   var resolvedHosts = {};
@@ -135,8 +124,7 @@ function forwarder(fromPort, fromIP, toPort, toIP, allowedHosts) {
     dest.setEncoding(ENCODING);
     var s = sessions[cid] = { client: client, dest: dest,  
       fromPort: fromPort, fromIP: fromIP, toPort: toPort, toIP: toIP, 
-      bytesIn: 0, bytesOut: 0,
-      clientStatus: 'P', destStatus: 'D' };
+      bytesIn: 0, bytesOut: 0 };
     logClient(client, 'NEW');
 
     client.addListener('connect', function() {
@@ -148,19 +136,15 @@ function forwarder(fromPort, fromIP, toPort, toIP, allowedHosts) {
       if (dest.write(data, ENCODING)) {
         s['bytesIn'] += data.length;
       } else {
-        s['clientStatus'] = 'P'; 
         client.pause();
       } 
     });
 
     client.addListener('drain', function() {
-      s['destStatus'] = 'R'; 
       dest.resume();
     });
 
     client.addListener('end', function() {
-      s['clientStatus'] = 'C'; 
-      s['destStatus'] = 'C'; 
       logClient(client, 'END');
       delete sessions[client.fd];
       dest.end();
@@ -179,7 +163,6 @@ function forwarder(fromPort, fromIP, toPort, toIP, allowedHosts) {
 
 setInterval(logSessions, 10000);
 
-forwarder(27017, '1.2.3.4', 27017, '127.0.0.1',
-  [ 'host1', 'host2', 'host3' ]);
-
+forwarder(27017, '69.163.148.171', 27017, '127.0.0.1',
+  [ 'nosql-01.eyb.com.br', 'nosql-02.eyb.com.br', 'nosql-03.eyb.com.br', 'nosql-04.eyb.com.br', 'yoda.gotdns.org' ]);
 
