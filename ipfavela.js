@@ -1,6 +1,8 @@
-var net = require("net");
-var sys = require("sys");
-var dns = require("dns");
+var net  = require("net");
+var sys  = require("sys");
+var dns  = require("dns");
+var fs   = require("fs");
+var yaml = require("yaml.js");
 
 var sessions = {};
 var ENCODING = 'binary';
@@ -9,14 +11,20 @@ function log(msg) {
   sys.puts(msg);
 }
 
+function loadConfig() {
+  fs.open('ipfavela.yml', 'r', function(err, fd) {
+    
+  });
+}
+
 function logClient(client, msg) {
   var cid = client.fd;
 
   if (cid == null) {
     msg = 'CLI: ' + client.remoteAddress + ' (' + cid + ') -- ' + msg
   } else { 
-    msg = 'CLI: ' + client.remoteAddress + ' (' + cid + ' ' + client.readyState)
-      + ') -- ' + msg;
+    msg = 'CLI: ' + client.remoteAddress + ' (' + cid + ' ' + client.readyState +
+      ') -- ' + msg;
   }
   log(msg);
 }
@@ -67,7 +75,7 @@ function logSessions() {
   for (i in sessions) {
     var s = sessions[i];
     log(s['client'].remoteAddress + ' (' + i + ' ' + s['client'].readyState + ' ' + '/' + 
-      s['dest'].fd + ' ' + s['dest'].readyState + ' ' + ') -- ' + 
+      s['dest'].fd + ' ' + s['dest'].readyState + ') -- ' + 
       s['fromIP'] + ':' + s['fromPort'] + ' -> ' + 
       s['toIP']   + ':' + s['toPort']   +  
       ' (' + s['bytesIn'] + ' in/' + s['bytesOut'] + ' out)');
@@ -81,8 +89,9 @@ function forwarder(fromPort, fromIP, toPort, toIP, allowedHosts) {
   function updateAllowedIP(host) {
     dns.resolve4(host, function(err, addresses) {
       if (err) {
-        log('host: ' + host);
-        throw err;
+        log('Error resolving host: ' + host);
+        /* don't throw, we're going to try this again anyway */
+        return;
       }
 
       /* remove previous resolved IPs */
@@ -133,6 +142,10 @@ function forwarder(fromPort, fromIP, toPort, toIP, allowedHosts) {
     });
 
     client.addListener('data', function(data) {
+      // check if stream is writable!
+      if (dest.readyState != 'open') {
+        return;
+      }
       if (dest.write(data, ENCODING)) {
         s['bytesIn'] += data.length;
       } else {
